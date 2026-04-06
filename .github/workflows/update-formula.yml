@@ -1,0 +1,112 @@
+name: Update Formula
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: update-formula
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch latest release info
+        id: release
+        run: |
+          set -euo pipefail
+          TAG=$(curl -sLf \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/jorgsowa/php-lsp/releases/latest \
+            | jq -r '.tag_name')
+          if [[ -z "$TAG" || "$TAG" == "null" ]]; then
+            echo "ERROR: could not fetch latest release tag" >&2
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if update is needed
+        id: check
+        run: |
+          set -euo pipefail
+          CURRENT=$(grep -oP '(?<=version ")[\d.]+' Formula/php-lsp.rb | head -1)
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          if [[ "$CURRENT" == "${{ steps.release.outputs.version }}" ]]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update formula
+        if: steps.check.outputs.needed == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          BASE_URL: https://github.com/jorgsowa/php-lsp/releases/download
+        run: |
+          set -euo pipefail
+
+          fetch_sha() {
+            local target="$1"
+            local sha
+            sha=$(curl -sLf "$BASE_URL/$TAG/php-lsp-${target}.tar.gz.sha256" | awk '{print $1}')
+            if [[ -z "$sha" || "$sha" == "null" || ${#sha} -ne 64 ]]; then
+              echo "ERROR: invalid SHA256 for $target: '$sha'" >&2
+              exit 1
+            fi
+            echo "$sha"
+          }
+
+          SHA_MACOS_ARM=$(fetch_sha "aarch64-apple-darwin")
+          SHA_MACOS_INTEL=$(fetch_sha "x86_64-apple-darwin")
+          SHA_LINUX_INTEL=$(fetch_sha "x86_64-unknown-linux-gnu")
+
+          FORMULA="Formula/php-lsp.rb"
+
+          # Update version
+          sed -i "s|version \"[^\"]*\"|version \"$VERSION\"|" "$FORMULA"
+
+          # Update macOS ARM sha256 (sha256 following the aarch64-apple-darwin URL)
+          awk -v sha="$SHA_MACOS_ARM" '
+            /aarch64-apple-darwin/ { next_sha=1 }
+            next_sha && /sha256/ { sub(/"[a-f0-9]{64}"/, "\"" sha "\""); next_sha=0 }
+            { print }
+          ' "$FORMULA" > "$FORMULA.tmp" && mv "$FORMULA.tmp" "$FORMULA"
+
+          # Update macOS Intel sha256 (sha256 following the x86_64-apple-darwin URL)
+          awk -v sha="$SHA_MACOS_INTEL" '
+            /x86_64-apple-darwin/ { next_sha=1 }
+            next_sha && /sha256/ { sub(/"[a-f0-9]{64}"/, "\"" sha "\""); next_sha=0 }
+            { print }
+          ' "$FORMULA" > "$FORMULA.tmp" && mv "$FORMULA.tmp" "$FORMULA"
+
+          # Update Linux Intel sha256 (sha256 following the x86_64-unknown-linux-gnu URL)
+          awk -v sha="$SHA_LINUX_INTEL" '
+            /x86_64-unknown-linux-gnu/ { next_sha=1 }
+            next_sha && /sha256/ { sub(/"[a-f0-9]{64}"/, "\"" sha "\""); next_sha=0 }
+            { print }
+          ' "$FORMULA" > "$FORMULA.tmp" && mv "$FORMULA.tmp" "$FORMULA"
+
+      - name: Commit and push
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/php-lsp.rb
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: bump php-lsp to ${{ steps.release.outputs.version }}"
+          git push
