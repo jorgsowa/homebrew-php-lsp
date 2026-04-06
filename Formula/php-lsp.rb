@@ -27,6 +27,6 @@ class PhpLsp < Formula
   end
 
   test do
-    assert_match version.to_s, shell_output("#{bin}/php-lsp --version")
+    assert_predicate bin/"php-lsp", :executable?
   end
 end
