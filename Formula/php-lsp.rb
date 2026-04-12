@@ -1,24 +1,24 @@
 class PhpLsp < Formula
   desc "PHP Language Server Protocol implementation"
   homepage "https://github.com/jorgsowa/php-lsp"
-  version "0.1.50"
+  version "0.1.51"
   license "MIT"
 
   on_macos do
     on_arm do
       url "https://github.com/jorgsowa/php-lsp/releases/download/v#{version}/php-lsp-aarch64-apple-darwin.tar.gz"
-      sha256 "cfb55e86bfe77ca6caee568f5c5281e9366430bf6ff4318c1177bbb715e9519f"
+      sha256 "ef28e1c341155507ad28d14e710714f2c29126e0b6f96ac3afd2dbbd581b2911"
     end
     on_intel do
       url "https://github.com/jorgsowa/php-lsp/releases/download/v#{version}/php-lsp-x86_64-apple-darwin.tar.gz"
-      sha256 "5b096ed2740498a9b5f36181d89371d78c04dff8f5c0b46e5c1d15c50f9191de"
+      sha256 "f0d9031cbf3999704120898649f1bb5b5379ab61a0c6ae54e0b85fca4951367d"
     end
   end
 
   on_linux do
     on_intel do
       url "https://github.com/jorgsowa/php-lsp/releases/download/v#{version}/php-lsp-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "b854c263b128062335419ea74d28adea7049d76d6c67f8f0d1c2c35d88c16868"
+      sha256 "780542103fb37ca5e792e3a38d8f33a197b10feb720df83cbc4e78ca2a0b66d2"
     end
   end
 
